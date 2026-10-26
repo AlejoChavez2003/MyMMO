@@ -13,6 +13,7 @@ public class AbilityBookUI : MonoBehaviour
     public static AbilityData DraggedAbility { get; private set; }
     public static AbilityData SelectedAbility { get; private set; }
     private int displayedLevel = -1;
+    private string displayedClass;
 
     private void Start()
     {
@@ -29,9 +30,10 @@ public class AbilityBookUI : MonoBehaviour
 
     private void Update()
     {
-        if (displayedLevel != GameData.Level)
+        if (displayedLevel != GameData.Level || displayedClass != GameData.PlayerClass)
         {
             displayedLevel = GameData.Level;
+            displayedClass = GameData.PlayerClass;
             RefreshEntries();
         }
 
@@ -89,7 +91,7 @@ public class AbilityBookUI : MonoBehaviour
     public bool IsUnlocked(AbilityData ability)
     {
         return ability != null && GameData.Level >= ability.requiredLevel &&
-            (string.IsNullOrEmpty(ability.requiredClass) || ability.requiredClass == GameData.PlayerClass);
+            GameData.IsClass(ability.requiredClass);
     }
 
     public void BeginAbilityDrag(AbilityData ability)
@@ -246,11 +248,13 @@ public class AbilityEntryUI : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     {
         bool unlocked = abilityBook.IsUnlocked(ability);
         Button button = GetComponent<Button>();
-        button.interactable = true;
+        button.interactable = unlocked;
         button.transition = Selectable.Transition.None;
         label.text = unlocked
             ? ability.abilityName
-            : $"{ability.abilityName} (Nivel {ability.requiredLevel})";
+            : GameData.Level < ability.requiredLevel
+                ? $"{ability.abilityName} (Nivel {ability.requiredLevel})"
+                : $"{ability.abilityName} ({ability.requiredClass})";
         GetComponent<Image>().color = unlocked
             ? new Color(0.35f, 0.75f, 0.4f, 1f)
             : new Color(0.25f, 0.25f, 0.25f, 1f);

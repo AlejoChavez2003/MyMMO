@@ -131,7 +131,11 @@ public class ActionBarController : MonoBehaviour
 
     public void AssignAbility(int slot, AbilityData ability)
     {
-        if (ability == null || slot < 0 || slot >= abilities.Length) return;
+        if (ability == null || slot < 0 || slot >= abilities.Length || !IsAbilityUnlocked(ability))
+        {
+            Debug.LogWarning($"[ActionBar] No se puede asignar una habilidad bloqueada para la clase {GameData.PlayerClass}.");
+            return;
+        }
         abilities[slot] = ability;
         if (slot < itemIds.Length) itemIds[slot] = "";
         Debug.Log($"[ActionBar] Habilidad {ability.abilityName} asignada al slot {slot + 1}.");
@@ -223,7 +227,7 @@ public class ActionBarController : MonoBehaviour
     private static bool IsAbilityUnlocked(AbilityData ability)
     {
         return ability != null && GameData.Level >= ability.requiredLevel &&
-            (string.IsNullOrEmpty(ability.requiredClass) || ability.requiredClass == GameData.PlayerClass);
+            GameData.IsClass(ability.requiredClass);
     }
 }
 

@@ -1,4 +1,5 @@
 using UnityEngine;
+using TMPro;
 
 public enum EnemyAiState
 {
@@ -11,6 +12,18 @@ public enum EnemyAiState
 // Heredamos de Targetable para que PlayerHUD lo reconozca automáticamente
 public class NetworkEnemy : Targetable 
 {
+    private const float MovementThreshold = 0.05f;
+    private static readonly int[] WalkingStateHashes =
+    {
+        Animator.StringToHash("Base Layer.Walking_New"),
+        Animator.StringToHash("Base Layer.Walking")
+    };
+    private static readonly int[] IdleStateHashes =
+    {
+        Animator.StringToHash("Base Layer.Idle_New"),
+        Animator.StringToHash("Base Layer.Idle")
+    };
+
     public int enemyId;
     public int enemyTypeId;
     public string enemyType;
@@ -28,6 +41,8 @@ public class NetworkEnemy : Targetable
     private float nextHitVisualTime;
     private bool isDying;
     private Vector3 serverPosition;
+    private Vector3 lastPosition;
+    private bool isMoving;
     private float nextAttackTriggerTime;
     private NetworkManager networkManager;
 
@@ -38,12 +53,17 @@ public class NetworkEnemy : Targetable
     {
         animator = GetComponentInChildren<Animator>();
         serverPosition = transform.position;
+        lastPosition = transform.position;
         networkManager = FindAnyObjectByType<NetworkManager>();
     }
 
     private void Update()
     {
-        if (isDying) return;
+        if (isDying)
+        {
+            lastPosition = transform.position;
+            return;
+        }
 
         Transform combatTarget = targetClientId > 0 ? FindTargetTransform() : null;
         Vector3 moveTarget = serverPosition;
@@ -57,7 +77,7 @@ public class NetworkEnemy : Targetable
             if (currentState == EnemyAiState.Chase && distanceToTarget <= 1.5f)
             {
                 transform.position = Vector3.Lerp(transform.position, serverPosition, Time.deltaTime * syncLerpSpeed);
-                UpdateAnimator();
+                UpdateMovementAnimation();
                 return;
             }
         }
@@ -83,7 +103,7 @@ public class NetworkEnemy : Targetable
             transform.position = Vector3.Lerp(transform.position, serverPosition, Time.deltaTime * syncLerpSpeed);
         }
 
-        UpdateAnimator();
+        UpdateMovementAnimation();
     }
 
     public void Initialize(int id, string type, int hp, int enemyLevel)
@@ -91,27 +111,69 @@ public class NetworkEnemy : Targetable
         enemyId = id;
         int.TryParse(type, out enemyTypeId);
         enemyType = GetDisplayName(type);
+        entityName = enemyType;
         networkId = id;
         serverPosition = transform.position;
+        lastPosition = transform.position;
         
         maxHP = hp;
         currentHP = hp;
         level = Mathf.Max(1, enemyLevel);
+        EnsureNameplate();
+        nameplateText = nameText;
 
         if (nameText != null)
         {
-            nameText.text = string.IsNullOrEmpty(entityName) ? enemyType : entityName;
+            nameText.text = entityName;
+        }
+
+        if (nameplateText != null)
+        {
+            nameplateText.text = entityName;
         }
 
         Debug.Log($"[NetworkEnemy] Inicializado: {enemyType} (ID: {enemyId}) con {maxHP} HP.");
     }
 
+    private void EnsureNameplate()
+    {
+        if (nameText == null)
+        {
+            nameText = GetComponentInChildren<TextMeshProUGUI>(true);
+        }
+
+        if (nameText != null)
+        {
+            return;
+        }
+
+        GameObject canvasObject = new GameObject("EnemyNameplate", typeof(RectTransform), typeof(Canvas), typeof(Billboard));
+        canvasObject.transform.SetParent(transform, false);
+        canvasObject.transform.localPosition = new Vector3(0f, 2f, 0f);
+        canvasObject.transform.localScale = Vector3.one * 0.01f;
+
+        Canvas canvas = canvasObject.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = Camera.main;
+
+        GameObject textObject = new GameObject("NameText", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        textObject.transform.SetParent(canvasObject.transform, false);
+        RectTransform textRect = textObject.GetComponent<RectTransform>();
+        textRect.sizeDelta = new Vector2(200f, 50f);
+
+        nameText = textObject.GetComponent<TextMeshProUGUI>();
+        nameText.font = TMP_Settings.defaultFontAsset;
+        nameText.fontSize = 12f;
+        nameText.alignment = TextAlignmentOptions.Center;
+    }
+
     private static string GetDisplayName(string type)
     {
-        switch (type)
+        switch (int.TryParse(type, out int typeId) ? typeId : 0)
         {
-            case "2": return "Paladin oscuro";
-            case "3": return "Bestia veloz";
+            case 1: return "Paladín Básico";
+            case 2: return "Paladín Élite";
+            case 3: return "Lobo";
             default: return "Criatura";
         }
     }
@@ -143,17 +205,49 @@ public class NetworkEnemy : Targetable
         if (animator == null) return;
 
         bool inCombat = currentState == EnemyAiState.Chase || currentState == EnemyAiState.Attack;
-        bool isMoving = currentState == EnemyAiState.Chase
-            || (currentState == EnemyAiState.Wander && Vector3.Distance(transform.position, serverPosition) > 0.1f);
+        bool shouldMove = isMoving && currentState != EnemyAiState.Attack;
 
-        SetAnimatorBool("isMoving", isMoving);
+        SetAnimatorBool("isMoving", shouldMove);
+        SetAnimatorBool("IsMoving", shouldMove);
         SetAnimatorBool("isChasing", currentState == EnemyAiState.Chase);
-        SetAnimatorBool("isRunning", currentState == EnemyAiState.Chase);
+        SetAnimatorBool("isRunning", shouldMove && currentState == EnemyAiState.Chase);
         SetAnimatorBool("isAttacking", currentState == EnemyAiState.Attack);
+
+        if (!HasAnimatorParameter("isMoving", AnimatorControllerParameterType.Bool)
+            && !HasAnimatorParameter("IsMoving", AnimatorControllerParameterType.Bool))
+        {
+            PlayMovementState(shouldMove);
+        }
 
         if (inCombat && currentState == EnemyAiState.Attack)
         {
             SetAnimatorBool("isMoving", false);
+            SetAnimatorBool("IsMoving", false);
+        }
+    }
+
+    private void UpdateMovementAnimation()
+    {
+        isMoving = Vector3.Distance(transform.position, lastPosition) > MovementThreshold;
+        UpdateAnimator();
+        lastPosition = transform.position;
+    }
+
+    private void PlayMovementState(bool moving)
+    {
+        int[] stateHashes = moving ? WalkingStateHashes : IdleStateHashes;
+
+        foreach (int stateHash in stateHashes)
+        {
+            if (animator.HasState(0, stateHash))
+            {
+                if (animator.GetCurrentAnimatorStateInfo(0).fullPathHash != stateHash)
+                {
+                    animator.Play(stateHash, 0);
+                }
+
+                return;
+            }
         }
     }
 

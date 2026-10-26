@@ -4865,6 +4865,7 @@ MonoBehaviour:
   jugadorPrefab: {fileID: 6252445741350658969, guid: 2230b33572628b645b686d3f098a8500, type: 3}
   remoteYOffset: 0.05
   enemyPrefab: {fileID: 74324983597531834, guid: 6fef7f56f55cc5048b8b4830a78447bd, type: 3}
+  wolfPrefab: {fileID: 8867960657160430145, guid: 6bb6d53c75b24aa408757e09fe2c8de9, type: 3}
   damageTextPrefab: {fileID: 3162869947309733070, guid: 0f6723416c8b81244914214dbd528865, type: 3}
 --- !u!1 &1023583925
 GameObject:

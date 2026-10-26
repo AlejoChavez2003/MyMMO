@@ -23,6 +23,7 @@ namespace MyMMOServer
         {
             AddItem("health_potion", 5);
             AddItem("iron_sword", 1);
+            AddItem("novice_bow", 1);
             AddItem("leather_armor", 1);
         }
 
@@ -102,11 +103,11 @@ namespace MyMMOServer
         public string WeaponItemId { get; private set; } = "";
         public string ArmorItemId { get; private set; } = "";
 
-        public bool TryEquip(Inventory inventory, int inventoryIndex, string slot)
+        public bool TryEquip(Inventory inventory, int inventoryIndex, string slot, string characterClass)
         {
             if (inventory == null || !IsValidSlot(slot) || GetItemId(slot).Length > 0) return false;
             string itemId = inventory.GetItemId(inventoryIndex);
-            if (!CanEquip(itemId, slot) ||
+            if (!CanEquip(itemId, slot, characterClass) ||
                 !inventory.TryTake(inventoryIndex, out itemId, out int quantity) || quantity != 1) return false;
 
             SetItemId(slot, itemId);
@@ -130,10 +131,18 @@ namespace MyMMOServer
 
         private static bool IsValidSlot(string slot) => slot == "weapon" || slot == "armor";
 
-        private static bool CanEquip(string itemId, string slot)
+        private static bool CanEquip(string itemId, string slot, string characterClass)
         {
-            return (slot == "weapon" && itemId == "iron_sword") ||
+            return (slot == "weapon" &&
+                    ((itemId == "iron_sword" && IsClass(characterClass, "Guerrero", "Warrior")) ||
+                     (itemId == "novice_bow" && IsClass(characterClass, "Cazador", "Arquero", "Archer", "Explorador", "Ranger")))) ||
                    (slot == "armor" && itemId == "leather_armor");
+        }
+
+        private static bool IsClass(string characterClass, params string[] allowedClasses)
+        {
+            return Array.Exists(allowedClasses, allowedClass =>
+                string.Equals(characterClass?.Trim(), allowedClass, StringComparison.OrdinalIgnoreCase));
         }
 
         private string GetItemId(string slot) => slot == "weapon" ? WeaponItemId : ArmorItemId;

@@ -70,11 +70,11 @@ namespace MyMMOServer
 
         public static void ProcessBasicAttack(int attackerId, string targetIdValue)
         {
+            ServerClient? attacker = FindClientById(attackerId);
+            if (attacker == null || !HasCompatibleWeapon(attacker, "BASIC_ATTACK")) return;
+
             if (int.TryParse(targetIdValue, out int targetId))
-            {
-                ServerClient? attacker = FindClientById(attackerId);
-                ApplyDamageToEnemy(targetId, attacker?.GetPhysicalDamage(5) ?? 5, attackerId, "BASIC_ATTACK");
-            }
+                ApplyDamageToEnemy(targetId, attacker.GetPhysicalDamage(5), attackerId, "BASIC_ATTACK");
         }
 
         public static void ProcessAttack(int attackerId, string abilityId, string targetIdValue, string slotValue)
@@ -85,8 +85,10 @@ namespace MyMMOServer
             if (attacker == null || !IsAbilityAllowed(attacker, abilityId))
             {
                 Console.WriteLine($"[COMBATE] Habilidad rechazada: jugador {attackerId}, habilidad {abilityId}.");
+                attacker?.SendMessage("ATTACK_FAILED:ABILITY_RESTRICTED");
                 return;
             }
+            if (!HasCompatibleWeapon(attacker, abilityId)) return;
 
             int damage = attacker.GetPhysicalDamage(abilityId == "BASIC_ATTACK" ? 5 : 15);
             ApplyDamageToEnemy(targetId, damage, attackerId, abilityId, slot);
@@ -94,8 +96,44 @@ namespace MyMMOServer
 
         private static bool IsAbilityAllowed(ServerClient client, string abilityId)
         {
-            if (abilityId == "BASIC_ATTACK" || abilityId == "1001") return true;
-            return abilityId == "1002" && client.Level >= 3 && client.CharacterClass == "Guerrero";
+            if (abilityId == "BASIC_ATTACK") return true;
+            if (abilityId != "1001" && abilityId != "1002") return false;
+
+            bool isArcher = IsArcherClass(client.CharacterClass);
+            return isArcher && (abilityId == "1001" || client.Level >= 3);
+        }
+
+        private static bool IsArcherClass(string characterClass)
+        {
+            return new[] { "Cazador", "Arquero", "Archer", "Explorador", "Ranger" }
+                .Any(className => string.Equals(characterClass?.Trim(), className, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool HasCompatibleWeapon(ServerClient client, string abilityId)
+        {
+            string equippedWeapon = client.Equipment.WeaponItemId;
+            if (string.IsNullOrEmpty(equippedWeapon))
+            {
+                client.SendMessage("ATTACK_FAILED:NEED_WEAPON");
+                return false;
+            }
+
+            string requiredWeapon = abilityId switch
+            {
+                "1001" => "novice_bow",
+                "1002" => "novice_bow",
+                _ => ""
+            };
+            bool compatible = string.IsNullOrEmpty(requiredWeapon)
+                ? equippedWeapon == "iron_sword" || equippedWeapon == "novice_bow"
+                : equippedWeapon == requiredWeapon;
+            if (!compatible)
+            {
+                client.SendMessage("ATTACK_FAILED:INCOMPATIBLE_WEAPON");
+                return false;
+            }
+
+            return true;
         }
 
         public static void ProcessCastSkill(int attackerId, string skillId, string targetIdValue)
@@ -104,8 +142,10 @@ namespace MyMMOServer
             if (attacker == null || !IsAbilityAllowed(attacker, skillId))
             {
                 Console.WriteLine($"[COMBATE] Habilidad rechazada: jugador {attackerId}, habilidad {skillId}.");
+                attacker?.SendMessage("ATTACK_FAILED:ABILITY_RESTRICTED");
                 return;
             }
+            if (!HasCompatibleWeapon(attacker, skillId)) return;
 
             if (int.TryParse(targetIdValue, out int targetId))
             {
@@ -120,7 +160,7 @@ namespace MyMMOServer
             bool died = false;
             int experienceReward = 0;
             int bronzeReward = 0;
-            string dropItemId = "";
+            List<string> dropItemIds = new();
             ZoneSpawner? spawner = null;
             string? chaseStatePacket = null;
 
@@ -149,9 +189,12 @@ namespace MyMMOServer
                     EnemyProfile profile = EnemyProfile.ForType(enemy.EnemyType);
                     experienceReward = profile.ExperienceReward;
                     bronzeReward = Random.Shared.Next(profile.MinBronzeReward, profile.MaxBronzeReward + 1);
-                    if (Random.Shared.NextDouble() <= profile.DropChance)
+                    foreach (EnemyLootDrop drop in profile.LootTable)
                     {
-                        dropItemId = profile.DropItemId;
+                        if (Random.Shared.NextDouble() <= drop.Chance)
+                        {
+                            dropItemIds.Add(drop.ItemId);
+                        }
                     }
                     died = true;
                 }
@@ -164,7 +207,8 @@ namespace MyMMOServer
 
             if (attackerId > 0)
             {
-                BroadcastMessage($"RECEIVE_ATTACK_BROADCAST:{attackerId},{abilityId},{targetId},{slot}", attackerId);
+                string weaponItemId = FindClientById(attackerId)?.Equipment.WeaponItemId ?? "";
+                BroadcastMessage($"RECEIVE_ATTACK_BROADCAST:{attackerId},{abilityId},{targetId},{slot},{weaponItemId}", attackerId);
             }
 
             BroadcastMessage($"UPDATE_ENEMY_HP:{targetId},{currentHp}");
@@ -176,17 +220,22 @@ namespace MyMMOServer
                 {
                     attacker.AddExperience(experienceReward);
                     attacker.AddBronzeCoins(bronzeReward);
-                    if (!string.IsNullOrEmpty(dropItemId))
+                    bool inventoryChanged = false;
+                    foreach (string dropItemId in dropItemIds)
                     {
                         if (attacker.Inventory.AddItem(dropItemId, 1))
                         {
                             attacker.SendMessage($"DROP_REWARD:{dropItemId},1");
-                            attacker.SendMessage($"INVENTORY_STATE:{attacker.Inventory.Serialize()}");
+                            inventoryChanged = true;
                         }
                         else
                         {
                             attacker.SendMessage($"DROP_FAILED:{dropItemId},INVENTORY_FULL");
                         }
+                    }
+                    if (inventoryChanged)
+                    {
+                        attacker.SendMessage($"INVENTORY_STATE:{attacker.Inventory.Serialize()}");
                     }
                     attacker.SendProgress(experienceReward);
                 }
@@ -256,7 +305,8 @@ namespace MyMMOServer
                 enemy.TargetClientId = 0;
             }
 
-            if (enemy.TargetClientId <= 0 && closestPlayer != null && closestDistance <= enemy.AggroRadius)
+            if (enemy.AggroOnSight && enemy.TargetClientId <= 0 &&
+                closestPlayer != null && closestDistance <= enemy.AggroRadius)
             {
                 enemy.TargetClientId = closestPlayer.Id;
                 enemy.State = EnemyState.Chase;

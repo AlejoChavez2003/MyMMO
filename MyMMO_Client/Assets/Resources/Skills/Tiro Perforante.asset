@@ -14,10 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AbilityData
   abilityId: 1002
   abilityName: Tiro Perforante
-  requiredClass: Guerrero
+  requiredClass: Cazador
   requiredLevel: 3
   baseDamage: 15
   cooldown: 5
   range: 18
+  requiredWeaponItemId: novice_bow
   effectType: 0
   animationName: 

@@ -22,6 +22,26 @@ public static class GameData
     public static bool IsLoggedIn = false;
     public static event Action Changed;
 
+    public static bool IsClass(string requiredClass)
+    {
+        if (string.IsNullOrWhiteSpace(requiredClass)) return true;
+
+        bool playerIsArcher = IsAnyClass(PlayerClass, "Cazador", "Arquero", "Archer", "Explorador", "Ranger");
+        bool requiredIsArcher = IsAnyClass(requiredClass, "Cazador", "Arquero", "Archer", "Explorador", "Ranger");
+        return playerIsArcher && requiredIsArcher ||
+               string.Equals(PlayerClass?.Trim(), requiredClass.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAnyClass(string characterClass, params string[] classNames)
+    {
+        foreach (string className in classNames)
+        {
+            if (string.Equals(characterClass?.Trim(), className, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        return false;
+    }
+
     public static void NotifyChanged()
     {
         Changed?.Invoke();
@@ -44,8 +64,19 @@ public sealed class ItemDefinition
     public int MaxStack { get; }
     public Color SlotColor { get; }
     public string EquipmentSlot { get; }
+    public int PhysicalDamageBonus { get; }
+    public int AttackSpeedBonus { get; }
 
-    public ItemDefinition(string id, string displayName, string description, ItemType type, int maxStack, Color slotColor, string equipmentSlot = "")
+    public ItemDefinition(
+        string id,
+        string displayName,
+        string description,
+        ItemType type,
+        int maxStack,
+        Color slotColor,
+        string equipmentSlot = "",
+        int physicalDamageBonus = 0,
+        int attackSpeedBonus = 0)
     {
         Id = id;
         DisplayName = displayName;
@@ -54,6 +85,8 @@ public sealed class ItemDefinition
         MaxStack = maxStack;
         SlotColor = slotColor;
         EquipmentSlot = equipmentSlot;
+        PhysicalDamageBonus = physicalDamageBonus;
+        AttackSpeedBonus = attackSpeedBonus;
     }
 }
 
@@ -81,7 +114,21 @@ public static class ItemCatalog
                     ItemType.Equipment,
                     1,
                     new Color(0.55f, 0.65f, 0.8f, 1f),
-                    "weapon")
+                    "weapon",
+                    5)
+            },
+            {
+                "novice_bow",
+                new ItemDefinition(
+                    "novice_bow",
+                    "Arco de Novato",
+                    "Arma a distancia para comenzar la aventura.\nBonus: +10 dano fisico, +5 velocidad de ataque.",
+                    ItemType.Equipment,
+                    1,
+                    new Color(0.65f, 0.48f, 0.28f, 1f),
+                    "weapon",
+                    10,
+                    5)
             },
             {
                 "leather_armor",
@@ -93,6 +140,56 @@ public static class ItemCatalog
                     1,
                     new Color(0.55f, 0.35f, 0.18f, 1f),
                     "armor")
+            },
+            {
+                "armor_scraps",
+                new ItemDefinition(
+                    "armor_scraps",
+                    "Restos de armadura",
+                    "Fragmentos de armadura militar encontrados entre los restos de un paladin.",
+                    ItemType.Material,
+                    20,
+                    new Color(0.48f, 0.5f, 0.54f, 1f))
+            },
+            {
+                "broken_sword",
+                new ItemDefinition(
+                    "broken_sword",
+                    "Espada rota",
+                    "Una espada militar quebrada que aun puede aprovecharse como material.",
+                    ItemType.Material,
+                    20,
+                    new Color(0.58f, 0.61f, 0.68f, 1f))
+            },
+            {
+                "wolf_fang",
+                new ItemDefinition(
+                    "wolf_fang",
+                    "Colmillo de Lobo",
+                    "Un colmillo afilado obtenido de un lobo.",
+                    ItemType.Material,
+                    20,
+                    new Color(0.82f, 0.8f, 0.7f, 1f))
+            },
+            {
+                "wolf_pelt",
+                new ItemDefinition(
+                    "wolf_pelt",
+                    "Piel de Lobo",
+                    "Piel resistente que puede servir para fabricar equipo.",
+                    ItemType.Material,
+                    20,
+                    new Color(0.48f, 0.37f, 0.28f, 1f))
+            },
+            {
+                "raw_meat",
+                new ItemDefinition(
+                    "raw_meat",
+                    "Carne cruda",
+                    "Carne obtenida de una criatura salvaje.",
+                    ItemType.Material,
+                    20,
+                    new Color(0.72f, 0.32f, 0.3f, 1f))
             },
             {
                 "beast_fang",
@@ -156,11 +253,24 @@ public static class EnemyDropCatalog
         switch (enemyType)
         {
             case 2:
-                return new[] { new EnemyDropPreview("shadow_essence", 1, 1, 75) };
+                return new[]
+                {
+                    new EnemyDropPreview("armor_scraps", 1, 1, 45),
+                    new EnemyDropPreview("broken_sword", 1, 1, 30)
+                };
             case 3:
-                return new[] { new EnemyDropPreview("beast_fang", 1, 1, 50) };
+                return new[]
+                {
+                    new EnemyDropPreview("wolf_fang", 1, 1, 50),
+                    new EnemyDropPreview("wolf_pelt", 1, 1, 35),
+                    new EnemyDropPreview("raw_meat", 1, 1, 60)
+                };
             default:
-                return new[] { new EnemyDropPreview("beast_fang", 1, 1, 35) };
+                return new[]
+                {
+                    new EnemyDropPreview("armor_scraps", 1, 1, 35),
+                    new EnemyDropPreview("broken_sword", 1, 1, 20)
+                };
         }
     }
 }

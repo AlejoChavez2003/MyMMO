@@ -17,6 +17,7 @@ public class AbilityData : ScriptableObject
     public int baseDamage;
     public float cooldown;
     public float range = 5f;
+    public string requiredWeaponItemId;
     public AbilityEffectType effectType;
     public string animationName;
 }

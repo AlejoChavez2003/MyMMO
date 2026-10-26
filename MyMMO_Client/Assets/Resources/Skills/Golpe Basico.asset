@@ -14,10 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::AbilityData
   abilityId: 1001
   abilityName: Golpe Basico
-  requiredClass:
+  requiredClass: Cazador
   requiredLevel: 1
   baseDamage: 11
   cooldown: 3
   range: 18
+  requiredWeaponItemId: novice_bow
   effectType: 0
   animationName: 

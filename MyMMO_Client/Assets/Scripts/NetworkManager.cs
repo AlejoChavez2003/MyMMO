@@ -39,6 +39,7 @@ public class NetworkManager : MonoBehaviour
 
     [NonSerialized] public Dictionary<int, GameObject> activeEnemies = new Dictionary<int, GameObject>();
     public GameObject enemyPrefab; // Arrastra tu Prefab de enemigo aquí desde el inspector
+    public GameObject wolfPrefab;
     public GameObject damageTextPrefab;
 
     public async Task ConnectToServerAsync()
@@ -380,6 +381,16 @@ public class NetworkManager : MonoBehaviour
         {
             Debug.LogWarning($"[Equipo] {parts[1]}");
         }
+        else if (parts[0] == "ATTACK_FAILED" && parts.Length > 1)
+        {
+            string message = parts[1] switch
+            {
+                "NEED_WEAPON" => "¡Necesitas un arma equipada!",
+                "ABILITY_RESTRICTED" => "Esta habilidad no está disponible para tu clase o nivel.",
+                _ => "¡Necesitas equipar el arma compatible con esta habilidad!"
+            };
+            FindAnyObjectByType<PlayerHUD>()?.ShowCombatMessage(message);
+        }
         else if (parts[0] == "ATTRIBUTE_FAILED" && parts.Length > 1)
         {
             Debug.LogWarning($"[Atributos] {parts[1]}");
@@ -473,7 +484,7 @@ public class NetworkManager : MonoBehaviour
         else if (parts[0] == "RECEIVE_ATTACK_BROADCAST" && parts.Length > 1)
         {
             string[] attackData = parts[1].Split(',');
-            if (attackData.Length == 4 &&
+            if (attackData.Length >= 4 &&
                 int.TryParse(attackData[0], out int attackerId) &&
                 int.TryParse(attackData[2], out int targetId) &&
                 int.TryParse(attackData[3], out int slot) &&
@@ -482,7 +493,8 @@ public class NetworkManager : MonoBehaviour
                 NetworkPlayer attacker = attackerObject.GetComponent<NetworkPlayer>();
                 if (attacker != null)
                 {
-                    attacker.PlayRemoteAttack(attackData[1], slot, FindEntityTransform(targetId));
+                    string weaponItemId = attackData.Length > 4 ? attackData[4] : "";
+                    attacker.PlayRemoteAttack(attackData[1], slot, weaponItemId, FindEntityTransform(targetId));
                 }
             }
         }
@@ -562,6 +574,7 @@ public class NetworkManager : MonoBehaviour
         {
             string[] enemyData = parts[1].Split(',');
             if (enemyData.Length >= 7 && int.TryParse(enemyData[0], out int enemyId) &&
+                int.TryParse(enemyData[1], out int enemyTypeId) &&
                 int.TryParse(enemyData[2], out int enemyMaxHp) && int.TryParse(enemyData[3], out int enemyLevel))
             {
                 string enemyType = enemyData[1];
@@ -577,16 +590,16 @@ public class NetworkManager : MonoBehaviour
                     activeEnemies = new Dictionary<int, GameObject>();
                 }
 
-                // 2. Validamos que hayas asignado el modelo del enemigo
-                if (enemyPrefab == null)
+                GameObject prefabToSpawn = enemyTypeId == 3 ? wolfPrefab : enemyPrefab;
+                if (prefabToSpawn == null)
                 {
-                    Debug.LogError("[Red] ¡ERROR! Intentando spawnear enemigo, pero enemyPrefab está vacío en el Inspector de Unity.");
-                    return; 
+                    Debug.LogError($"[Red] No hay prefab asignado para el tipo de enemigo {enemyType} en el Inspector de Unity.");
+                    return;
                 }
 
                 if (!activeEnemies.ContainsKey(enemyId))
                 {
-                    GameObject newEnemy = Instantiate(enemyPrefab, spawnPos, Quaternion.identity);
+                    GameObject newEnemy = Instantiate(prefabToSpawn, spawnPos, Quaternion.identity);
                     
                     // 3. Validamos si creaste el script NetworkEnemy o no
                     NetworkEnemy netEnemy = newEnemy.GetComponent<NetworkEnemy>() ?? newEnemy.GetComponentInChildren<NetworkEnemy>();

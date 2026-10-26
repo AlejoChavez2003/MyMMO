@@ -66,7 +66,7 @@ public class NetworkPlayer : MonoBehaviour
 
     }
 
-    public void PlayRemoteAttack(string abilityId, int slot, Transform target)
+    public void PlayRemoteAttack(string abilityId, int slot, string weaponItemId, Transform target)
     {
         if (animator != null)
         {
@@ -74,7 +74,7 @@ public class NetworkPlayer : MonoBehaviour
         }
 
         GameObject projectilePrefab = abilityId == "BASIC_ATTACK"
-            ? basicArrowPrefab
+            ? weaponItemId == "novice_bow" ? basicArrowPrefab : null
             : slot == 0 ? skill1Prefab : slot == 1 ? skill2Prefab : null;
 
         if (projectilePrefab == null || target == null) return;

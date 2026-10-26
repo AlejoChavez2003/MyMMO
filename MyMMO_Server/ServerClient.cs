@@ -102,7 +102,7 @@ namespace MyMMOServer
                         {
                             string[] equipParts = line.Substring("EQUIP_ITEM:".Length).Split(',');
                             if (equipParts.Length == 2 && int.TryParse(equipParts[0], out int inventoryIndex) &&
-                                Equipment.TryEquip(Inventory, inventoryIndex, equipParts[1]))
+                                Equipment.TryEquip(Inventory, inventoryIndex, equipParts[1], CharacterClass))
                             {
                                 SendMessage($"INVENTORY_STATE:{Inventory.Serialize()}");
                                 SendMessage($"EQUIPMENT_STATE:{Equipment.Serialize()}");
@@ -326,7 +326,12 @@ namespace MyMMOServer
 
         public int GetPhysicalDamage(int baseDamage)
         {
-            int weaponBonus = Equipment.WeaponItemId == "iron_sword" ? 5 : 0;
+            int weaponBonus = Equipment.WeaponItemId switch
+            {
+                "iron_sword" => 5,
+                "novice_bow" => 10,
+                _ => 0
+            };
             return Math.Max(1, baseDamage + (Strength - 1) + weaponBonus);
         }
 
@@ -356,16 +361,16 @@ namespace MyMMOServer
         public float MoveSpeed { get; private set; }
         public float AttackDamage { get; private set; }
         public float AttackCooldown { get; private set; }
+        public bool AggroOnSight { get; private set; }
         public int ExperienceReward { get; private set; }
         public int MinBronzeReward { get; private set; }
         public int MaxBronzeReward { get; private set; }
-        public double DropChance { get; private set; }
-        public string DropItemId { get; private set; }
+        public IReadOnlyList<EnemyLootDrop> LootTable { get; private set; }
 
         private EnemyProfile(int maxHp, int level, float aggroRadius, float leashRadius,
             float attackRange, float moveSpeed, float attackDamage, float attackCooldown,
-            int experienceReward, int minBronzeReward, int maxBronzeReward,
-            double dropChance, string dropItemId)
+            bool aggroOnSight, int experienceReward, int minBronzeReward, int maxBronzeReward,
+            IReadOnlyList<EnemyLootDrop> lootTable)
         {
             MaxHp = maxHp;
             Level = level;
@@ -375,21 +380,49 @@ namespace MyMMOServer
             MoveSpeed = moveSpeed;
             AttackDamage = attackDamage;
             AttackCooldown = attackCooldown;
+            AggroOnSight = aggroOnSight;
             ExperienceReward = experienceReward;
             MinBronzeReward = minBronzeReward;
             MaxBronzeReward = maxBronzeReward;
-            DropChance = dropChance;
-            DropItemId = dropItemId;
+            LootTable = lootTable;
         }
 
         public static EnemyProfile ForType(int type)
         {
             return type switch
             {
-                2 => new EnemyProfile(100, 5, 12f, 30f, 2.5f, 1.8f, 15f, 1.8f, 500, 25, 60, 0.75, "shadow_essence"),
-                3 => new EnemyProfile(35, 2, 14f, 32f, 1.8f, 4.2f, 8f, 1.0f, 175, 8, 20, 0.50, "beast_fang"),
-                _ => new EnemyProfile(50, 1, 10f, 25f, 2.2f, 2.3f, 10f, 1.4f, 100, 5, 15, 0.35, "beast_fang")
+                2 => new EnemyProfile(100, 5, 12f, 30f, 2.5f, 1.8f, 15f, 1.8f, true, 500, 25, 60,
+                    new[]
+                    {
+                        new EnemyLootDrop("armor_scraps", 0.45),
+                        new EnemyLootDrop("broken_sword", 0.30)
+                    }),
+                3 => new EnemyProfile(35, 2, 14f, 32f, 1.8f, 4.2f, 8f, 1.0f, false, 175, 8, 20,
+                    new[]
+                    {
+                        new EnemyLootDrop("wolf_fang", 0.50),
+                        new EnemyLootDrop("wolf_pelt", 0.35),
+                        new EnemyLootDrop("raw_meat", 0.60)
+                    }),
+                _ => new EnemyProfile(50, 1, 10f, 25f, 2.2f, 2.3f, 10f, 1.4f, true, 100, 5, 15,
+                    new[]
+                    {
+                        new EnemyLootDrop("armor_scraps", 0.35),
+                        new EnemyLootDrop("broken_sword", 0.20)
+                    })
             };
+        }
+    }
+
+    public sealed class EnemyLootDrop
+    {
+        public string ItemId { get; }
+        public double Chance { get; }
+
+        public EnemyLootDrop(string itemId, double chance)
+        {
+            ItemId = itemId;
+            Chance = chance;
         }
     }
 
@@ -418,6 +451,7 @@ namespace MyMMOServer
         public float MoveSpeed { get; set; } = 2.3f;
         public float AttackDamage { get; set; } = 10f;
         public float AttackCooldown { get; set; } = 1.4f;
+        public bool AggroOnSight { get; set; } = true;
         public float AttackTimer { get; set; } = 0f;
         public Vector3 WanderTarget { get; set; }
         public Vector3 SpawnPosition { get; set; }
@@ -444,6 +478,7 @@ namespace MyMMOServer
             MoveSpeed = profile.MoveSpeed;
             AttackDamage = profile.AttackDamage;
             AttackCooldown = profile.AttackCooldown;
+            AggroOnSight = profile.AggroOnSight;
         }
     }
 }

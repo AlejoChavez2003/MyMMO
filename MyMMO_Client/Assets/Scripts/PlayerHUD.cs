@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 
 public class PlayerHUD : MonoBehaviour
 {
@@ -32,6 +33,9 @@ public class PlayerHUD : MonoBehaviour
     private GameObject exitMenuPanel;
     private GameObject rewardsPanel;
     private EquipmentUI equipmentUI;
+    private GameObject combatMessagePanel;
+    private TMP_Text combatMessageText;
+    private Coroutine combatMessageCoroutine;
 
     public Targetable CurrentTarget => currentTarget;
 
@@ -143,6 +147,59 @@ public class PlayerHUD : MonoBehaviour
         }
     }
 
+    public void ShowCombatMessage(string message)
+    {
+        EnsureCombatMessagePanel();
+        if (combatMessageText == null) return;
+
+        combatMessageText.text = message;
+        combatMessagePanel.SetActive(true);
+        if (combatMessageCoroutine != null) StopCoroutine(combatMessageCoroutine);
+        combatMessageCoroutine = StartCoroutine(HideCombatMessageAfterDelay());
+    }
+
+    private void EnsureCombatMessagePanel()
+    {
+        if (combatMessagePanel != null) return;
+
+        Canvas canvas = GetComponentInParent<Canvas>();
+        if (canvas == null)
+        {
+            Debug.LogWarning("[Combate] No se pudo mostrar el mensaje: PlayerHUD no está dentro de un Canvas.");
+            return;
+        }
+
+        combatMessagePanel = new GameObject("CombatMessage", typeof(RectTransform), typeof(Image));
+        combatMessagePanel.transform.SetParent(canvas.transform, false);
+        RectTransform panelRect = combatMessagePanel.GetComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0.5f, 1f);
+        panelRect.anchorMax = new Vector2(0.5f, 1f);
+        panelRect.pivot = new Vector2(0.5f, 1f);
+        panelRect.anchoredPosition = new Vector2(0f, -80f);
+        panelRect.sizeDelta = new Vector2(460f, 48f);
+        combatMessagePanel.GetComponent<Image>().color = new Color(0.35f, 0.08f, 0.06f, 0.92f);
+
+        GameObject textObject = new GameObject("Message", typeof(RectTransform), typeof(TextMeshProUGUI));
+        textObject.transform.SetParent(combatMessagePanel.transform, false);
+        RectTransform textRect = textObject.GetComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(12f, 4f);
+        textRect.offsetMax = new Vector2(-12f, -4f);
+        combatMessageText = textObject.GetComponent<TextMeshProUGUI>();
+        combatMessageText.fontSize = 20f;
+        combatMessageText.color = Color.white;
+        combatMessageText.alignment = TextAlignmentOptions.Center;
+        combatMessagePanel.SetActive(false);
+    }
+
+    private IEnumerator HideCombatMessageAfterDelay()
+    {
+        yield return new WaitForSeconds(2f);
+        if (combatMessagePanel != null) combatMessagePanel.SetActive(false);
+        combatMessageCoroutine = null;
+    }
+
     public void SetTarget(Targetable target)
     {
         currentTarget = target;
@@ -240,11 +297,14 @@ public class PlayerHUD : MonoBehaviour
         string rewardText;
         switch (enemy.enemyTypeId)
         {
+            case 1:
+                rewardText = "Paladín Básico\nEXP: 100\nMonedas: 5 - 15";
+                break;
             case 2:
-                rewardText = "Paladin oscuro\nEXP: 500\nMonedas: 25 - 60";
+                rewardText = "Paladín Élite\nEXP: 500\nMonedas: 25 - 60";
                 break;
             case 3:
-                rewardText = "Bestia veloz\nEXP: 175\nMonedas: 8 - 20";
+                rewardText = "Lobo\nEXP: 175\nMonedas: 8 - 20";
                 break;
             default:
                 rewardText = "Criatura\nEXP: 100\nMonedas: 5 - 15";
